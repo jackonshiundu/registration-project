@@ -1,15 +1,6 @@
 <?php
 session_start();
-
-$servername = "localhost";
-$username = "root";
-$password = "";
-$dbname = "john_doe";
-$conn = new mysqli($servername, $username, $password, $dbname);
-
-if ($conn->connect_error) {
-    die("Connection Failed: " . $conn->connect_error);
-}
+require 'db_connect.php';
 
 if (isset($_POST['submit'])) {
     $first_name = mysqli_real_escape_string($conn, $_POST['first_name']);
@@ -18,32 +9,39 @@ if (isset($_POST['submit'])) {
     $raw_password = $_POST['password'];
     $gender = mysqli_real_escape_string($conn, $_POST['Gender']);
 
-    // Hash the password
-    $hashed_password = password_hash($raw_password, PASSWORD_DEFAULT);
+    // Check if email already exists
+    $check_query = $conn->prepare("SELECT id FROM users WHERE email = ?");
+    $check_query->bind_param("s", $email);
+    $check_query->execute();
+    $check_query->store_result();
 
-    $sql = "INSERT INTO `users` (`first_name`, `last_name`, `email`, `password`, `Gender`)
-            VALUES (?, ?, ?, ?, ?)";
-
-    // Use prepared statements to prevent SQL injection
-    $stmt = $conn->prepare($sql);
-    $stmt->bind_param("sssss", $first_name, $last_name, $email, $hashed_password, $gender);
-
-    if ($stmt->execute()) {
-        // Store user data in session
-        $_SESSION['user_email'] = $email;
-        $_SESSION['user_name'] = $first_name . ' ' . $last_name;
-
-        // Redirect to welcome page
-        header("Location: welcome.php");
-        exit();
+    if ($check_query->num_rows > 0) {
+        echo "This email is already registered. <a href='login.php'>Login here</a>";
     } else {
-        echo "Error: " . $sql . "<br>" . $conn->error;
+        $hashed_password = password_hash($raw_password, PASSWORD_DEFAULT);
+
+        $sql = "INSERT INTO users (first_name, last_name, email, password, Gender) VALUES (?, ?, ?, ?, ?)";
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("sssss", $first_name, $last_name, $email, $hashed_password, $gender);
+
+        if ($stmt->execute()) {
+            $_SESSION['user_email'] = $email;
+            $_SESSION['user_name'] = $first_name . ' ' . $last_name;
+            header("Location: welcome.php");
+            exit();
+        } else {
+            echo "Registration failed. Try again.";
+        }
+
+        $stmt->close();
     }
 
-    $stmt->close();
+    $check_query->close();
     $conn->close();
 }
 ?>
+
+<!-- HTML Form same as before -->
 
 <!DOCTYPE html>
 <html lang="en">
@@ -71,5 +69,6 @@ if (isset($_POST['submit'])) {
             <input type="submit" name="submit" value="Register">
         </fieldset>
     </form>
+    <p>Already have  an account <a href="login.php">Login</a></p>
 </body>
 </html>
